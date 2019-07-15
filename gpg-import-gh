@@ -1,0 +1,72 @@
+#!/usr/bin/python
+
+import getopt
+import http.client
+import json
+import sys
+
+def eprint(*args, **kwargs):
+    if not verbose:
+        return
+    print(*args, file=sys.stderr, **kwargs)
+
+def out(*args, **kwargs):
+    if outfile:
+        print(*args, file=outfile, **kwargs)
+    else:
+        print(*args, file=sys.stdout, **kwargs)
+
+class Github:
+    def get(self, user):
+        conn = http.client.HTTPSConnection("api.github.com")
+        conn.request("GET", "/users/%s/gpg_keys" %user, "", {"User-Agent": "gpg-import"})
+        raw = conn.getresponse().read()
+        self.keylist = json.loads(raw)
+    def print(self):
+        for key in self.keylist:
+            eprint("key id:", key["key_id"])
+            eprint("emails:")
+            for email in key["emails"]:
+                if email["verified"]:
+                    eprint(email["email"])
+            for subkey in key["subkeys"]:
+                if subkey["can_sign"] :
+                    eprint("subkey id:", subkey["key_id"])
+                    eprint("created_at:", subkey["created_at"])
+                    eprint("expires_at:", subkey["expires_at"])
+
+
+            if key["raw_key"]:
+                out(key["raw_key"])
+            else:
+                eprint("key: n/a")
+
+if __name__ == "__main__":
+    arg0 = sys.argv.pop(0)
+    verbose = usage = False
+    outfile = None
+    args = []
+
+    try:
+        opts, args = getopt.getopt(sys.argv, "hvo:")
+        for opt,arg in opts:
+            if opt == "-h":
+                usage = True
+            elif opt == "-v":
+                verbose = True
+            elif opt == "-o":
+                outfile = open(arg, "w")
+    except:
+        usage = True
+
+    if len(args) != 1 or usage:
+        verbose = True
+        eprint(arg0, "[-h] [-v] [-o outfile.asc] <userid>")
+        sys.exit(1)
+
+    github = Github()
+    github.get(args[0])
+    github.print()
+
+    if outfile:
+        outfile.close()
